@@ -7,7 +7,6 @@ from flask.ext.restful import Api, Resource, reqparse, fields, marshal
 from flask.ext.login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import config
-from flask_restful_extend import marshal_with_model
 
 
 app = Flask(__name__)
@@ -17,10 +16,6 @@ api = Api(app)
 
 # database section
 
-#@app.route('/')
-#def index():
-#    return str(app.config['MAIL_PORT'])
-
 
 class Province(db.Model):
     __tablename__ = 'provinces'
@@ -29,7 +24,6 @@ class Province(db.Model):
     created_by_admin = db.Column(db.String(16))
     comments = db.Column(db.Text)
 
-
     def to_json(self):
         json_province ={
             'id': self.id,
@@ -37,7 +31,6 @@ class Province(db.Model):
             'comments': self.comments,
         }
         return json_province
-
 
     def __repr__(self):
         return self.province_name
@@ -52,8 +45,17 @@ class City(db.Model):
     created_by_admin = db.Column(db.String(16))
     comments = db.Column(db.Text)
 
+    def to_json(self):
+        json_city = {
+            'id': self.id,
+            'city_name': self.city_name,
+            'province_id': self.province_id,
+            'comments': self.comments,
+        }
+        return json_city
+
     def __repr__(self):
-        return  self.city_name
+        return self.city_name
 
 
 class County(db.Model):
@@ -64,6 +66,14 @@ class County(db.Model):
     city = db.relationship('City', backref=db.backref('counties', lazy='dynamic'))
     created_by_admin = db.Column(db.String(16))
     comments = db.Column(db.Text)
+
+    def to_json(self):
+        json_county = {
+            'id': self.id,
+            'county_name': self.county_name,
+            'city_id': self.city_id,
+            'comments': self.comments
+        }
 
     def __repr__(self):
         return self.county_name
@@ -78,6 +88,14 @@ class Street(db.Model):
     created_by_admin = db.Column(db.String(16))
     comments = db.Column(db.Text)
 
+    def to_json(self):
+        json_street = {
+            'id': self.id,
+            'street_name': self.street_name,
+            'county_id': self.county_id,
+            'comments': self.comments
+        }
+
     def __repr__(self):
         return self.street_name
 
@@ -90,6 +108,14 @@ class Community(db.Model):
     street = db.relationship('Street',backref=db.backref('communities', lazy='dynamic') )
     created_by_admin = db.Column(db.String(16))
     comments = db.Column(db.Text)
+
+    def to_json(self):
+        json_community = {
+            'id': self.id,
+            'community_name': self.community_name,
+            'street_id': self.street_id,
+            'comments': self.comments,
+        }
 
     def __repr__(self):
         return self.community_name
@@ -114,6 +140,18 @@ class Door(db.Model):
         if hw_door_key is None:
             pass
 
+    def to_json(self):
+        json_door = {
+            'id': self.id,
+            'door_name': self.door_name,
+            'public_door': self.public_door,
+            'building': self.building,
+            'unit': self.unit,
+            'community_id': self.community_id,
+            'comments': self.comments
+
+        }
+
     def __repr__(self):
         return self.door_name
 
@@ -129,6 +167,19 @@ class User(UserMixin, db.Model):
     created_by_admin = db.Column(db.String(16))
     comments = db.Column(db.Text)
     user_role = db.Column(db.String(16))
+    member_since = db.Column(db.Date)
+
+    def to_json(self):
+        json_user = {
+            'id': self.id,
+            'username': self.username,
+            'real_name': self.real_name,
+            'user_mobile': self.user_mobile,
+            'user_room': self.user_room,
+            'comments': self.comments,
+            'user_role': self.user_role,
+            'member_since': self.member_since
+        }
 
     def is_authenticated(self):
         return True
@@ -175,10 +226,9 @@ class ProvincesAPI(Resource):
         self.reqparse.add_argument('comments', type=str, default="", location='json')
         super(ProvincesAPI, self).__init__()
 
-    @marshal_with_model(Province)
     def get(self):
-        return Province.query
-
+        provinces = Province.query.all()
+        return jsonify({'provinces': [province.to_json() for province in provinces]})
 
     def post(self):
         pass
@@ -214,10 +264,9 @@ class CitiesAPI(Resource):
         self.reqparse.add_argument('comments', type=str, default="", location='json')
         super(CitiesAPI, self).__init__()
 
-    @marshal_with_model(City)
     def get(self):
-        return City.query
-
+        cities = City.query.all()
+        return jsonify({'cities': [city.to_json() for city in cities]})
 
     def post(self):
         pass
@@ -234,7 +283,8 @@ class CityAPI(Resource):
         super(CityAPI, self).__init__()
 
     def get(self, id):
-        return City.query.get(id)
+        city = City.query.get_or_404(id)
+        return jsonify(city.to_json())
 
     def put(self, id):
         pass
@@ -242,8 +292,32 @@ class CityAPI(Resource):
     def delete(self, id):
         pass
 
-api.add_resource(ProvinceAPI, '/v1/cities/<int:id>', endpoint='city')
+api.add_resource(CityAPI, '/v1/cities/<int:id>', endpoint='city')
 
+
+class CountiesAPI(Resource):
+    def get(self):
+        counties = County.query.all()
+        return jsonify({'counties': [county.to_json() for county in counties]})
+
+    def post(self):
+        pass
+
+api.add_resource(CountiesAPI, '/v1/counties', endpoint='counties')
+
+
+class CountyAPI(Resource):
+    def get(self, id):
+        county = County.query.get_or_404(id)
+        return jsonify(county.to_json())
+
+    def put(self):
+        pass
+
+    def delete(self):
+        pass
+
+api.add_resource(CountyAPI, '/v1/counties/<int:id>', endpoint='county')
 
 if __name__ == '__main__':
     app.run(debug=True)
