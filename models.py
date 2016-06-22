@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 from flask import Flask, jsonify, json
-from flask.ext.sqlalchemy import SQLAlchemy
-from flask.ext.restful import Api, Resource, reqparse, fields, marshal
-from flask.ext.login import UserMixin
+from flask_sqlalchemy import SQLAlchemy
+from flask_restful import Api, Resource, reqparse, fields
+from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import config
 
@@ -74,6 +74,7 @@ class County(db.Model):
             'city_id': self.city_id,
             'comments': self.comments
         }
+        return json_county
 
     def __repr__(self):
         return self.county_name
@@ -95,6 +96,7 @@ class Street(db.Model):
             'county_id': self.county_id,
             'comments': self.comments
         }
+        return json_street
 
     def __repr__(self):
         return self.street_name
@@ -103,7 +105,7 @@ class Street(db.Model):
 class Community(db.Model):
     __tablename__ = 'communities'
     id = db.Column(db.Integer, primary_key=True)
-    community_name = db.Column(db.Integer, unique=True)
+    community_name = db.Column(db.String(128), unique=True)
     street_id = db.Column(db.Integer, db.ForeignKey('streets.id'))
     street = db.relationship('Street',backref=db.backref('communities', lazy='dynamic') )
     created_by_admin = db.Column(db.String(16))
@@ -116,6 +118,7 @@ class Community(db.Model):
             'street_id': self.street_id,
             'comments': self.comments,
         }
+        return json_community
 
     def __repr__(self):
         return self.community_name
@@ -151,6 +154,7 @@ class Door(db.Model):
             'comments': self.comments
 
         }
+        return json_door
 
     def __repr__(self):
         return self.door_name
@@ -167,7 +171,7 @@ class User(UserMixin, db.Model):
     created_by_admin = db.Column(db.String(16))
     comments = db.Column(db.Text)
     user_role = db.Column(db.String(16))
-    member_since = db.Column(db.Date)
+#    member_since = db.Column(db.Date)
 
     def to_json(self):
         json_user = {
@@ -178,8 +182,9 @@ class User(UserMixin, db.Model):
             'user_room': self.user_room,
             'comments': self.comments,
             'user_role': self.user_role,
-            'member_since': self.member_since
+#            'member_since': self.member_since
         }
+        return json_user
 
     def is_authenticated(self):
         return True
@@ -318,6 +323,106 @@ class CountyAPI(Resource):
         pass
 
 api.add_resource(CountyAPI, '/v1/counties/<int:id>', endpoint='county')
+
+
+class StreetsAPI(Resource):
+    def get(self):
+        streets = Street.query.all()
+        return jsonify({'streets': [street.to_json() for street in streets]})
+
+    def post(self):
+        pass
+
+api.add_resource(StreetsAPI, '/v1/streets', endpoint='streets')
+
+
+class StreetAPI(Resource):
+    def get(self, id):
+        street = Street.query.get_or_404(id)
+        return jsonify(street.to_json())
+
+    def put(self,id):
+        pass
+
+    def delete(self):
+        pass
+
+api.add_resource(StreetAPI, '/v1/streets/<int:id>', endpoint='street')
+
+
+class CommunitiesAPI(Resource):
+    def get(self):
+        communities = Community.query.all()
+        return jsonify({'communities': [community.to_json() for community in communities]})
+
+    def post(self):
+        pass
+
+api.add_resource(CommunitiesAPI, '/v1/communities', endpoint='communities')
+
+
+class CommunityAPI(Resource):
+    def get(self, id):
+        community = Community.query.get_or_404(id)
+        return jsonify(community.to_json())
+
+    def put(self,id):
+        pass
+
+    def delete(self):
+        pass
+
+api.add_resource(CommunityAPI, '/v1/communities/<int:id>', endpoint='community')
+
+
+class DoorsAPI(Resource):
+    def get(self):
+        doors = Door.query.all()
+        return jsonify({'doors': [door.to_json() for door in doors]})
+
+    def post(self):
+        pass
+
+api.add_resource(DoorsAPI, '/v1/doors', endpoint='doors')
+
+
+class DoorAPI(Resource):
+    def get(self, id):
+        door = Door.query.get_or_404(id)
+        return jsonify(door.to_json())
+
+    def put(self,id):
+        pass
+
+    def delete(self):
+        pass
+
+api.add_resource(DoorAPI, '/v1/doors/<int:id>', endpoint='door')
+
+
+class UsersAPI(Resource):
+    def get(self):
+        users = User.query.all()
+        return jsonify({'users': [user.to_json() for user in users]})
+
+    def post(self):
+        pass
+
+api.add_resource(UsersAPI, '/v1/users', endpoint='users')
+
+
+class UserAPI(Resource):
+    def get(self, id):
+        user = User.query.get_or_404(id)
+        return jsonify(user.to_json())
+
+    def put(self,id):
+        pass
+
+    def delete(self):
+        pass
+
+api.add_resource(UserAPI, '/v1/users/<int:id>', endpoint='user')
 
 if __name__ == '__main__':
     app.run(debug=True)
