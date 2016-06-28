@@ -365,5 +365,57 @@ def post_counties():
     return jsonify({'county': county.county_name + ' created successfully'}), 201
 
 
+@app.route('/v1/counties/<int:id>', methods=['GET'])
+def get_county(id):
+    county = County.query.get_or_404(id)
+    return jsonify(county.to_json())
+
+
+@app.route('/v1/counties/<int:id>', methods=['PUT'])
+def put_county(id):
+    if not request.json:
+        abort(400)
+    county = County.query.get_or_404(id)
+    county.county_name = request.json.get('county_name', county.county_name)
+    county.city_id = request.json.get('city_id', county.city_id)
+    county.comments = request.json.get('comments', county.comments)
+    db.session.commit()
+    return jsonify({'county': 'updated successfully'})
+
+
+@app.route('/v1/counties/<int:id>', methods=['DELETE'])
+def delete_county(id):
+    county = County.query.get_or_404(id)
+    db.session.delete(county)
+    db.session.commit()
+    return jsonify({'county': county.county_name + 'deleted successfully'})
+
+
+@app.route('/v1/streets', methods=['GET'])
+def get_streets():
+    streets = Street.query.all()
+    return jsonify({'streets': [street.to_json() for street in streets]})
+
+
+@app.route('/v1/streets', methods=['POST'])
+def post_streets():
+    if not request.json or not 'street_name' in request.json or not 'county_id' in request.json:
+        abort(400)
+    street = Street(request.json['street_name'], request.json['county_id'], 'superadmin', request.json.get('comments', ''))
+    db.session.add(street)
+    db.session.commit()
+    return jsonify({'street': street.street_name + ' created successfully'}), 201
+
+
+@app.route('/v1/streets/<int:id>', methods=['GET'])
+def get_street(id):
+    street = Street.query.get_or_404(id)
+    return jsonify(street.to_json)
+
+
+@app.route('/v1/streets/<int:id>', methods=['PUT'])
+def put_street(id):
+    
+
 if __name__ == '__main__':
     app.run(debug=True)
