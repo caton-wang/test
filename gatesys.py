@@ -1,9 +1,10 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from flask import Flask, jsonify, request, make_response, abort, json
+import datetime
+from flask import Flask, jsonify, request, make_response, abort, json, g
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import UserMixin
+from flask_login import UserMixin, LoginManager,
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import config
 
@@ -11,6 +12,10 @@ from config import config
 app = Flask(__name__)
 app.config.from_object(config['default'])
 db = SQLAlchemy(app)
+login_manager = LoginManager(app)
+login_manager.session_protection = 'strong'
+login_manager.login_view
+
 
 # database section
 
@@ -154,9 +159,9 @@ class Community(db.Model):
 class Door(db.Model):
     __tablename__ = 'doors'
     id = db.Column(db.Integer, primary_key=True)
-    door_name = db.Column(db.String(32), unique=True)
-    serial_number = db.Column(db.String(128), unique=True)
-    hw_door_key = db.Column(db.String(128), unique=True)
+    door_name = db.Column(db.String(32), unique=True, nullable=False)
+    serial_number = db.Column(db.String(128), unique=True, nullable=False)
+    hw_door_key = db.Column(db.String(128), unique=True, nullable=False)
     public_door = db.Column(db.Boolean, default=False)
     building = db.Column(db.String(32))
     unit = db.Column(db.String(16))
@@ -168,12 +173,14 @@ class Door(db.Model):
     def __init__(self, door_name, serial_number, hw_door_key, public_door, building, unit, community_id,
                  created_by_admin, comments):
         self.door_name = door_name
-        self.serial_number =serial_number
+        self.serial_number = serial_number
         self.hw_door_key = hw_door_key
         self.public_door = public_door
         self.building = building
         self.unit = unit
         self.community_id = community_id
+        self.created_by_admin = created_by_admin
+        self.comments = comments
 
     def cal_hw_door_key(self, hw_door_key=None):
 
@@ -184,12 +191,13 @@ class Door(db.Model):
         json_door = {
             'id': self.id,
             'door_name': self.door_name,
+            'serial_number': self.serial_number,
+            'hw_door_key': self.hw_door_key,
             'public_door': self.public_door,
             'building': self.building,
             'unit': self.unit,
             'community_id': self.community_id,
             'comments': self.comments
-
         }
         return json_door
 
@@ -200,26 +208,30 @@ class Door(db.Model):
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(64))
+    username = db.Column(db.String(64), unique=True)
     password_hash = db.Column(db.String(128))
+    active = db.Column(db.Boolean, default=True)
     real_name = db.Column(db.String(32))
     user_mobile = db.Column(db.String(16), unique=True)
     user_room = db.Column(db.String(32))
+    user_type = db.Column(db.String(32))
     created_by_admin = db.Column(db.String(16))
-    comments = db.Column(db.Text)
     user_role = db.Column(db.String(16))
-#    member_since = db.Column(db.Date)
+    member_since = db.Column(db.DateTime, default=datetime.datetime.now())
+    comments = db.Column(db.Text)
 
     def to_json(self):
         json_user = {
             'id': self.id,
             'username': self.username,
+            'active': self.active,
             'real_name': self.real_name,
             'user_mobile': self.user_mobile,
             'user_room': self.user_room,
-            'comments': self.comments,
+            'user_type': self.user_type,
             'user_role': self.user_role,
-#            'member_since': self.member_since
+            'member_since': self.member_since,
+            'comments': self.comments,
         }
         return json_user
 
@@ -227,7 +239,7 @@ class User(UserMixin, db.Model):
         return True
 
     def is_active(self):
-        return True
+        return self.active
 
     def is_anonymous(self):
         return False
@@ -415,7 +427,116 @@ def get_street(id):
 
 @app.route('/v1/streets/<int:id>', methods=['PUT'])
 def put_street(id):
-    
+    if not request.json:
+        abort(400)
+    street = Street.query.get_or_404(id)
+    street.street_name = request.json.get('street_name', street.street_name)
+    street.county_id = request.json.get('county_id', street.county_id)
+    street.comments = request.json.get('comments', street.comments)
+    db.session.commit()
+    return jsonify({'street': 'updated successfully'})
+
+
+@app.route('/v1/streets/<int:id>', methods=['DELETE'])
+def delete_street(id):
+    street = Street.query.get_or_404(id)
+    db.session.delete(street)
+    db.session.commit()
+    return jsonify({'street': street.street_name + 'deleted successfully'})
+
+
+@app.route('/v1/communities', methods=['GET'])
+def get_communities():
+    communities = Community.query.all()
+    return jsonify({'communities': [community.to_json() for community in communities]})
+
+
+@app.route('/v1/communities', methods=['POST'])
+def post_communities():
+    if not request.json or not 'community_name' in request.json or not 'street_id' in request.json:
+        abort(400)
+    community = Community(request.json['community_name'], request.json['street_id'], 'superadmin', request.json.get('comments', ''))
+    db.session.add(community)
+    db.session.commit()
+    return jsonify({'community': community.community_name + ' created successfully'}), 201
+
+
+@app.route('/v1/communities/<int:id>', methods=['GET'])
+def get_community(id):
+    community = Community.query.get_or_404(id)
+    return jsonify(community.to_json)
+
+
+@app.route('/v1/communities/<int:id>', methods=['PUT'])
+def put_community(id):
+    if not request.json:
+        abort(400)
+    community = Community.query.get_or_404(id)
+    community.community_name = request.json.get('community_name', community.community_name)
+    community.street_id = request.json.get('street_id', community.street_id)
+    community.comments = request.json.get('comments', community.comments)
+    db.session.commit()
+    return jsonify({'community': 'updated successfully'})
+
+
+@app.route('/v1/communities/<int:id>', methods=['DELETE'])
+def delete_community(id):
+    community = Community.query.get_or_404(id)
+    db.session.delete(community)
+    db.session.commit()
+    return jsonify({'community': community.community_name + 'deleted successfully'})
+
+
+@app.route('/v1/doors', methods=['GET'])
+def get_doors():
+    doors = Community.query.all()
+    return jsonify({'doors': [door.to_json() for door in doors]})
+
+
+@app.route('/v1/doors', methods=['POST'])
+def post_doors():
+    if not request.json or not 'door_name' in request.json or not 'serial_number' in request.json \
+            or not 'hw_door_key' in request.json or not 'public_door' in request.json or not 'building' in \
+            request.json or not 'unit' in request.json or not 'community_id' in request.json:
+        abort(400)
+    door = Door(request.json['door_name'], request.json['serial_number'], request.json['hw_door_key'], \
+                request.json['public_door'], request.json['building'], request.json['unit'], \
+                request.json['community_id'], 'superadmin', request.json.get('comments', ''))
+    db.session.add(door)
+    db.session.commit()
+    return jsonify({'door': door.door_name + ' created successfully'}), 201
+
+
+@app.route('/v1/doors/<int:id>', methods=['GET'])
+def get_door(id):
+    door = Door.query.get_or_404(id)
+    return jsonify(door.to_json)
+
+
+@app.route('/v1/door/<int:id>', methods=['PUT'])
+def put_door(id):
+    if not request.json:
+        abort(400)
+    door = Door.query.get_or_404(id)
+    door.door_name = request.json.get('door_name', door.door_name)
+    door.serial_number = request.json.get('serial_number', door.serial_number)
+    door.hw_door_key = request.json.get('hw_door_key', door.hw_door_key)
+    door.public_door = request.json.get('public_door', door.public_door)
+    door.building = request.json.get('building', door.building)
+    door.unit = request.json.get('unit', door.unit)
+    door.community_id = request.json.get('community_id', door.community_id)
+    door.comments = request.json.get('comments', door.coments)
+    db.session.commit()
+    return jsonify({'door': 'updated successfully'})
+
+
+@app.route('/v1/door/<int:id>', methods=['DELETE'])
+def delete_door(id):
+    door = Door.query.get_or_404(id)
+    db.session.delete(door)
+    db.session.commit()
+    return jsonify({'door': door.door_name + 'deleted successfully'})
+
 
 if __name__ == '__main__':
     app.run(debug=True)
