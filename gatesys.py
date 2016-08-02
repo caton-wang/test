@@ -1,20 +1,22 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+import os
 import datetime
-from flask import Flask, jsonify, request, make_response, abort, json, g
+from flask import Flask, jsonify, request, make_response, abort, g, url_for
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import UserMixin, LoginManager,
-from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import LoginManager
+from flask_httpauth import HTTPBasicAuth
+from passlib.apps import custom_app_context as pwd_context
+from itsdangerous import (TimedJSONWebSignatureSerializer as Serializer, BadSignature, SignatureExpired)
+#from werkzeug.security import generate_password_hash, check_password_hash
 from config import config
 
 
 app = Flask(__name__)
 app.config.from_object(config['default'])
 db = SQLAlchemy(app)
-login_manager = LoginManager(app)
-login_manager.session_protection = 'strong'
-login_manager.login_view
+auth = HTTPBasicAuth()
 
 
 # database section
@@ -205,7 +207,7 @@ class Door(db.Model):
         return self.door_name
 
 
-class User(UserMixin, db.Model):
+class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), unique=True)
@@ -215,6 +217,8 @@ class User(UserMixin, db.Model):
     user_mobile = db.Column(db.String(16), unique=True)
     user_room = db.Column(db.String(32))
     user_type = db.Column(db.String(32))
+    open_door_perm = db.Column(db.Boolean, default=False)
+    transfer_door_perm = db.Column(db.Boolean, default=False)
     created_by_admin = db.Column(db.String(16))
     user_role = db.Column(db.String(16))
     member_since = db.Column(db.DateTime, default=datetime.datetime.now())
@@ -230,11 +234,49 @@ class User(UserMixin, db.Model):
             'user_room': self.user_room,
             'user_type': self.user_type,
             'user_role': self.user_role,
+            'open_door_perm': self.open_door_perm,
+            'transfer_door_perm': self.transfer_door_perm,
             'member_since': self.member_since,
             'comments': self.comments,
         }
         return json_user
 
+    def hash_password(self, password):
+        self.password_hash = pwd_context.encrypt(password)
+
+    def verify_password(self, password):
+        return pwd_context.verify(password, self.password_hash)
+
+    def generate_auth_token(self, expiration=24*365*3600):
+        s = Serializer(app.config['SECRET_KEY'], expires_in=expiration)
+        return s.dumps({'id': self.id})
+
+    @staticmethod
+    def verify_auth_token(token):
+        s = Serializer(app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token)
+        except SignatureExpired:
+            return None
+        except BadSignature:
+            return None
+        user = User.query.get(data['id'])
+        return user
+
+@auth.verify_password
+def verify_password(username_or_token, password):
+    # first try to authenticate by token
+    user = User.verify_auth_token(username_or_token)
+    if not user:
+        # try to authenticate with username/password
+        user = User.query.filter_by(username=username_or_token).first()
+        if not user or not user.verify_password(password):
+            return False
+    g.user = user
+    return True
+
+
+"""
     def is_authenticated(self):
         return True
 
@@ -260,6 +302,7 @@ class User(UserMixin, db.Model):
 
     def verify_password(self, password):
         return check_password_hash(self.password_hash, password)
+"""
 
 db.create_all()
 
@@ -536,6 +579,33 @@ def delete_door(id):
     db.session.delete(door)
     db.session.commit()
     return jsonify({'door': door.door_name + 'deleted successfully'})
+
+
+@app.route('/v1/users', methods=['POST'])
+def post_users():
+    if not request.json or not 'username' in request.json or not 'password' in request.json \
+            or not 'user_mobile' in request.json or not 'user_room' in request.json or not \
+            'user_type' in request.json or not 'open_door_perm' in request.json or not \
+            'transfer_door_perm' in request.json or not 'user_role' in request.json:
+        abort(400)
+    username = request.json.get('username')
+    password = request.json.get('password')
+
+    if User.query.filter_by(username=username).first() is not None:
+        abort(400)
+
+    user = User(username=username, active=request.json.get('active', ''), real_name=request.json.get('real_name'),
+                user_mobile=request.json['user_mobile'], user_room=request.json['user_room'],
+                user_type=request.json['user_type'], open_door_perm=request.json['open_door_perm'],
+                transfer_door_perm=request.json['transfer_door_perm'], created_by_admin='superadmin',
+                user_role=request.json['user_role'], member_since=request.json.get('member_since'),
+                comments=request.json.get('comments'))
+    user.hash_password(password)
+    db.session.add(user)
+    db.session.commmit()
+    return (jsonify({'username': user.username}), 201, {'Location': url_for('get_user', id=user.id, _external=True)})
+
+
 
 
 if __name__ == '__main__':
