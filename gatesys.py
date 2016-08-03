@@ -1,15 +1,12 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-import os
 import datetime
 from flask import Flask, jsonify, request, make_response, abort, g, url_for
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
 from flask_httpauth import HTTPBasicAuth
 from passlib.apps import custom_app_context as pwd_context
 from itsdangerous import (TimedJSONWebSignatureSerializer as Serializer, BadSignature, SignatureExpired)
-#from werkzeug.security import generate_password_hash, check_password_hash
 from config import config
 
 
@@ -217,7 +214,7 @@ class User(db.Model):
     user_mobile = db.Column(db.String(16), unique=True)
     user_room = db.Column(db.String(32))
     user_type = db.Column(db.String(32))
-    open_door_perm = db.Column(db.Boolean, default=False)
+    door_can_open = db.Column(db.String(256), nullable=False)
     transfer_door_perm = db.Column(db.Boolean, default=False)
     created_by_admin = db.Column(db.String(16))
     user_role = db.Column(db.String(16))
@@ -262,6 +259,7 @@ class User(db.Model):
             return None
         user = User.query.get(data['id'])
         return user
+
 
 @auth.verify_password
 def verify_password(username_or_token, password):
@@ -320,13 +318,17 @@ def bad_request(error):
 
 
 @app.route('/v1/provinces', methods=['GET'])
+@auth.login_required
 def get_provinces():
     provinces = Province.query.all()
     return jsonify({'provinces': [province.to_json() for province in provinces]})
 
 
 @app.route('/v1/provinces', methods=['POST'])
+@auth.login_required
 def post_provinces():
+    if g.user.user_role != 'superadmin':
+        abort(403)
     if not request.json or not 'province_name' in request.json:
         abort(400)
     province = Province(request.json['province_name'], 'superadmin', request.json.get('comments', ''))
@@ -336,14 +338,17 @@ def post_provinces():
 
 
 @app.route('/v1/provinces/<int:id>', methods=['GET'])
+@auth.login_required
 def get_province(id):
     province = Province.query.get_or_404(id)
     return jsonify(province.to_json())
 
 
 @app.route('/v1/provinces/<int:id>', methods=['PUT'])
+@auth.login_required
 def put_province(id):
-
+    if g.user.user_role != 'superadmin':
+        abort(403)
     if not request.json:
         abort(400)
     province = Province.query.get_or_404(id)
@@ -354,7 +359,10 @@ def put_province(id):
 
 
 @app.route('/v1/provinces/<int:id>', methods=['DELETE'])
+@auth.login_required
 def delete_province(id):
+    if g.user.user_role != 'superadmin':
+        abort(403)
     province = Province.query.get_or_404(id)
     db.session.delete(province)
     db.session.commit()
@@ -362,13 +370,17 @@ def delete_province(id):
 
 
 @app.route('/v1/cities', methods=['GET'])
+@auth.login_required
 def get_cities():
     cities = City.query.all()
     return jsonify({'cities': [city.to_json() for city in cities]})
 
 
 @app.route('/v1/cities', methods=['POST'])
+@auth.login_required
 def post_cities():
+    if g.user.user_role != 'superadmin':
+        abort(403)
     if not request.json or not 'city_name' in request.json or not 'province_id' in request.json:
         abort(400)
     city = City(request.json['city_name'], request.json['province_id'], 'superadmin', request.json.get('comments', ''))
@@ -378,14 +390,17 @@ def post_cities():
 
 
 @app.route('/v1/cities/<int:id>', methods=['GET'])
+@auth.login_required
 def get_city(id):
     city = City.query.get_or_404(id)
     return jsonify(city.to_json())
 
 
 @app.route('/v1/cities/<int:id>', methods=['PUT'])
+@auth.login_required
 def put_city(id):
-
+    if g.user.user_role != 'superadmin':
+        abort(403)
     if not request.json:
         abort(400)
     city = City.query.get_or_404(id)
@@ -397,7 +412,10 @@ def put_city(id):
 
 
 @app.route('/v1/cities/<int:id>', methods=['DELETE'])
+@auth.login_required
 def delete_city(id):
+    if g.user.user_role != 'superadmin':
+        abort(403)
     city = City.query.get_or_404(id)
     db.session.delete(city)
     db.session.commit()
@@ -405,13 +423,17 @@ def delete_city(id):
 
 
 @app.route('/v1/counties', methods=['GET'])
+@auth.login_required
 def get_counties():
     counties = County.query.all()
     return jsonify({'counties': [county.to_json() for county in counties]})
 
 
 @app.route('/v1/counties', methods=['POST'])
+@auth.login_required
 def post_counties():
+    if g.user.user_role != 'superadmin':
+        abort(403)
     if not request.json or not 'county_name' in request.json or not 'city_id' in request.json:
         abort(400)
     county = County(request.json['county_name'], request.json['city_id'], 'superadmin', request.json.get('comments', ''))
@@ -421,13 +443,17 @@ def post_counties():
 
 
 @app.route('/v1/counties/<int:id>', methods=['GET'])
+@auth.login_required
 def get_county(id):
     county = County.query.get_or_404(id)
     return jsonify(county.to_json())
 
 
 @app.route('/v1/counties/<int:id>', methods=['PUT'])
+@auth.login_required
 def put_county(id):
+    if g.user.user_role != 'superadmin':
+        abort(403)
     if not request.json:
         abort(400)
     county = County.query.get_or_404(id)
@@ -439,7 +465,10 @@ def put_county(id):
 
 
 @app.route('/v1/counties/<int:id>', methods=['DELETE'])
+@auth.login_required
 def delete_county(id):
+    if g.user.user_role != 'superadmin':
+        abort(403)
     county = County.query.get_or_404(id)
     db.session.delete(county)
     db.session.commit()
@@ -447,32 +476,44 @@ def delete_county(id):
 
 
 @app.route('/v1/streets', methods=['GET'])
+@auth.login_required
 def get_streets():
     streets = Street.query.all()
     return jsonify({'streets': [street.to_json() for street in streets]})
 
 
 @app.route('/v1/streets', methods=['POST'])
+@auth.login_required
 def post_streets():
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
     if not request.json or not 'street_name' in request.json or not 'county_id' in request.json:
         abort(400)
-    street = Street(request.json['street_name'], request.json['county_id'], 'superadmin', request.json.get('comments', ''))
+    street = Street(request.json['street_name'], request.json['county_id'], g.user.username, request.json.get('comments', ''))
     db.session.add(street)
     db.session.commit()
     return jsonify({'street': street.street_name + ' created successfully'}), 201
 
 
 @app.route('/v1/streets/<int:id>', methods=['GET'])
+@auth.login_required
 def get_street(id):
     street = Street.query.get_or_404(id)
     return jsonify(street.to_json)
 
 
 @app.route('/v1/streets/<int:id>', methods=['PUT'])
+@auth.login_required
 def put_street(id):
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
     if not request.json:
         abort(400)
-    street = Street.query.get_or_404(id)
+    if g.user.user_role == 'superadmin':
+        street = Street.query.get_or_404(id)
+    else:
+        street = Street.query.filter_by(id=id, created_by_admin=g.user.username).first()
+
     street.street_name = request.json.get('street_name', street.street_name)
     street.county_id = request.json.get('county_id', street.county_id)
     street.comments = request.json.get('comments', street.comments)
@@ -481,40 +522,59 @@ def put_street(id):
 
 
 @app.route('/v1/streets/<int:id>', methods=['DELETE'])
+@auth.login_required
 def delete_street(id):
-    street = Street.query.get_or_404(id)
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
+    if g.user.user_role == 'superadmin':
+        street = Street.query.get_or_404(id)
+    else:
+        street = Street.query.filter_by(id=id, created_by_admin=g.user.username).first()
+
     db.session.delete(street)
     db.session.commit()
     return jsonify({'street': street.street_name + 'deleted successfully'})
 
 
 @app.route('/v1/communities', methods=['GET'])
+@auth.login_required
 def get_communities():
     communities = Community.query.all()
     return jsonify({'communities': [community.to_json() for community in communities]})
 
 
 @app.route('/v1/communities', methods=['POST'])
+@auth.login_required
 def post_communities():
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
     if not request.json or not 'community_name' in request.json or not 'street_id' in request.json:
         abort(400)
-    community = Community(request.json['community_name'], request.json['street_id'], 'superadmin', request.json.get('comments', ''))
+    community = Community(request.json['community_name'], request.json['street_id'], g.user.username, request.json.get('comments', ''))
     db.session.add(community)
     db.session.commit()
     return jsonify({'community': community.community_name + ' created successfully'}), 201
 
 
 @app.route('/v1/communities/<int:id>', methods=['GET'])
+@auth.login_required
 def get_community(id):
     community = Community.query.get_or_404(id)
     return jsonify(community.to_json)
 
 
 @app.route('/v1/communities/<int:id>', methods=['PUT'])
+@auth.login_required
 def put_community(id):
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
     if not request.json:
         abort(400)
-    community = Community.query.get_or_404(id)
+    if g.user.user_role == 'superadmin':
+        community = Community.query.get_or_404(id)
+    else:
+        community = Community.query.filter_by(id=id, created_by_admin=g.user.username).first()
+
     community.community_name = request.json.get('community_name', community.community_name)
     community.street_id = request.json.get('street_id', community.street_id)
     community.comments = request.json.get('comments', community.comments)
@@ -523,44 +583,73 @@ def put_community(id):
 
 
 @app.route('/v1/communities/<int:id>', methods=['DELETE'])
+@auth.login_required
 def delete_community(id):
-    community = Community.query.get_or_404(id)
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
+    if g.user.user_role == 'superadmin':
+        community = Community.query.get_or_404(id)
+    else:
+        community = Community.query.filter_by(id=id, created_by_admin=g.user.username).first()
     db.session.delete(community)
     db.session.commit()
     return jsonify({'community': community.community_name + 'deleted successfully'})
 
 
 @app.route('/v1/doors', methods=['GET'])
+@auth.login_required
 def get_doors():
-    doors = Community.query.all()
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
+    if g.user.user_role == 'superadmin':
+        doors = Community.query.all()
+    else:
+        doors = Community.query.filter_by(created_by_admin=g.user.username)
+
     return jsonify({'doors': [door.to_json() for door in doors]})
 
 
 @app.route('/v1/doors', methods=['POST'])
+@auth.login_required
 def post_doors():
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
     if not request.json or not 'door_name' in request.json or not 'serial_number' in request.json \
             or not 'hw_door_key' in request.json or not 'public_door' in request.json or not 'building' in \
             request.json or not 'unit' in request.json or not 'community_id' in request.json:
         abort(400)
     door = Door(request.json['door_name'], request.json['serial_number'], request.json['hw_door_key'], \
                 request.json['public_door'], request.json['building'], request.json['unit'], \
-                request.json['community_id'], 'superadmin', request.json.get('comments', ''))
+                request.json['community_id'], g.user.username, request.json.get('comments', ''))
     db.session.add(door)
     db.session.commit()
     return jsonify({'door': door.door_name + ' created successfully'}), 201
 
 
 @app.route('/v1/doors/<int:id>', methods=['GET'])
+@auth.login_required
 def get_door(id):
-    door = Door.query.get_or_404(id)
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
+    if g.user.user_role == 'superadmin':
+        door = Door.query.get_or_404(id)
+    else:
+        door = Door.query.filter_by(id=id, created_by_admin=g.user.username)
     return jsonify(door.to_json)
 
 
 @app.route('/v1/door/<int:id>', methods=['PUT'])
+@auth.login_required
 def put_door(id):
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
     if not request.json:
         abort(400)
-    door = Door.query.get_or_404(id)
+    if g.user.user_role == 'superadmin':
+        door = Door.query.get_or_404(id)
+    else:
+        door = Door.query.filter_by(id=id, created_by_admin=g.user.username)
+
     door.door_name = request.json.get('door_name', door.door_name)
     door.serial_number = request.json.get('serial_number', door.serial_number)
     door.hw_door_key = request.json.get('hw_door_key', door.hw_door_key)
@@ -574,18 +663,28 @@ def put_door(id):
 
 
 @app.route('/v1/door/<int:id>', methods=['DELETE'])
+@auth.login_required
 def delete_door(id):
-    door = Door.query.get_or_404(id)
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
+    if g.user.user_role == 'superadmin':
+        door = Door.query.get_or_404(id)
+    else:
+        door = Door.query.filter_by(id=id, created_by_admin=g.user.username)
+
     db.session.delete(door)
     db.session.commit()
     return jsonify({'door': door.door_name + 'deleted successfully'})
 
 
 @app.route('/v1/users', methods=['POST'])
+@auth.login_required
 def post_users():
+    if g.user.user_role != 'superadmin' or g.user.user_role != 'admin':
+        abort(403)
     if not request.json or not 'username' in request.json or not 'password' in request.json \
             or not 'user_mobile' in request.json or not 'user_room' in request.json or not \
-            'user_type' in request.json or not 'open_door_perm' in request.json or not \
+            'user_type' in request.json or not 'door_can_open' in request.json or not \
             'transfer_door_perm' in request.json or not 'user_role' in request.json:
         abort(400)
     username = request.json.get('username')
@@ -596,17 +695,36 @@ def post_users():
 
     user = User(username=username, active=request.json.get('active', ''), real_name=request.json.get('real_name'),
                 user_mobile=request.json['user_mobile'], user_room=request.json['user_room'],
-                user_type=request.json['user_type'], open_door_perm=request.json['open_door_perm'],
-                transfer_door_perm=request.json['transfer_door_perm'], created_by_admin='superadmin',
+                user_type=request.json['user_type'], open_door_perm=request.json['door_can_open'],
+                transfer_door_perm=request.json['transfer_door_perm'], created_by_admin=g.user.username,
                 user_role=request.json['user_role'], member_since=request.json.get('member_since'),
                 comments=request.json.get('comments'))
     user.hash_password(password)
     db.session.add(user)
     db.session.commmit()
-    return (jsonify({'username': user.username}), 201, {'Location': url_for('get_user', id=user.id, _external=True)})
+    return jsonify({'username': user.username}), 201, {'Location': url_for('get_user', id=user.id, _external=True)}
 
 
+@app.route('/v1/user/<int:id>', methods=['GET'])
+@auth.login_required
+def get_user(id):
+    user = User.query.get(id)
+    if not user:
+        abort(400)
+    return jsonify({'username': user.username})
 
+
+@app.route('/v1/token', methods=['GET'])
+@auth.login_required
+def get_auth_token():
+    token = g.user.generate_auth_token(24*365*3600)
+    return jsonify({'token': token.decode('ascii'), 'duration': 24*365*3600})
+
+
+@app.route('/v1/user/resource', methods=['GET'])
+@auth.login_required
+def get_resource():
+    return jsonify({'data': 'Hello, %s!' % g.user.username})
 
 if __name__ == '__main__':
     app.run(debug=True)
