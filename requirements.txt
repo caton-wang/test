@@ -17,7 +17,7 @@ django-tastypie==0.13.3
 djangorestframework==3.3.3
 dominate==2.2.0
 duplicity==0.7.6
-ecdsa==0.13
+ecdsa==0.13.3
 enum34==1.1.2
 Flask==0.10.1
 Flask-Bootstrap==3.3.6.0
