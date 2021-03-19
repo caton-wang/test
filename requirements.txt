@@ -14,7 +14,7 @@ defer==1.0.6
 dirspec==13.10
 Django==1.8.13
 django-tastypie==0.13.3
-djangorestframework==3.3.3
+djangorestframework==3.11.2
 dominate==2.2.0
 duplicity==0.7.6
 ecdsa==0.13
