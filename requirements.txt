@@ -41,7 +41,7 @@ itsdangerous==0.24
 Jinja2==2.8
 json-encode-manager==0.0.1
 lockfile==0.12.2
-lxml==3.5.0
+lxml==4.6.3
 Mako==1.0.4
 MarkupSafe==0.23
 mimerender==0.6.0
