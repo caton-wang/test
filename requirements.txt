@@ -84,7 +84,7 @@ simplejson==3.8.2
 six==1.10.0
 software-center-aptd-plugins==0.0.0
 SQLAlchemy==1.0.13
-Twisted==16.0.0
+Twisted==20.3.0
 ubuntuone-client-data==14.4
 unity-lens-photos==1.0
 urllib3==1.13.1
